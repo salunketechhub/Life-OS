@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import '../models/task.dart';
 import '../models/document_item.dart';
 import '../models/bill_item.dart';
+import '../models/vehicle_item.dart';
 import '../services/task_storage_service.dart';
 import '../services/document_storage_service.dart';
 import '../services/bill_storage_service.dart';
+import '../services/vehicle_storage_service.dart';
+import 'vehicles_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -17,10 +20,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TaskStorageService _taskService = TaskStorageService();
   final DocumentStorageService _docService = DocumentStorageService();
   final BillStorageService _billService = BillStorageService();
+  final VehicleStorageService _vehicleService = VehicleStorageService();
 
   List<Task> _tasks = [];
   List<DocumentItem> _documents = [];
   List<BillItem> _bills = [];
+  List<VehicleItem> _vehicles = [];
   bool _isLoading = true;
 
   @override
@@ -33,11 +38,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final tasks = await _taskService.loadTasks();
     final docs = await _docService.loadDocuments();
     final bills = await _billService.loadBills();
+    final vehicles = await _vehicleService.loadVehicles();
+
     if (mounted) {
       setState(() {
         _tasks = tasks;
         _documents = docs;
         _bills = bills;
+        _vehicles = vehicles;
         _isLoading = false;
       });
     }
@@ -54,6 +62,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }).length;
   }
 
+  int get _urgentVehicleAlertsCount {
+    final now = DateTime.now();
+    int count = 0;
+    for (final v in _vehicles) {
+      if (v.insuranceExpiry != null) {
+        final diff = v.insuranceExpiry!.difference(now).inDays;
+        if (diff >= 0 && diff <= 15) count++;
+      }
+      if (v.pucExpiry != null) {
+        final diff = v.pucExpiry!.difference(now).inDays;
+        if (diff >= 0 && diff <= 15) count++;
+      }
+    }
+    return count;
+  }
+
   double get _monthlyCommitment {
     return _bills.fold(0.0, (sum, bill) {
       if (bill.cycle == BillingCycle.monthly) {
@@ -65,10 +89,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   int get _calculatedLifeScore {
-    if (_tasks.isEmpty && _documents.isEmpty && _bills.isEmpty) return 75;
+    if (_tasks.isEmpty && _documents.isEmpty && _bills.isEmpty && _vehicles.isEmpty) {
+      return 75;
+    }
     int score = 80;
     if (_pendingTasksCount > 5) score -= 10;
     if (_expiringDocsCount > 0) score -= 15;
+    if (_urgentVehicleAlertsCount > 0) score -= 10;
+
     final completedCount = _tasks.where((t) => t.isCompleted).length;
     if (_tasks.isNotEmpty) {
       score += ((completedCount / _tasks.length) * 20).toInt();
@@ -77,6 +105,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _generateAiInsight() {
+    if (_urgentVehicleAlertsCount > 0) {
+      return 'Vehicle alert: You have $_urgentVehicleAlertsCount insurance/PUC renewal(s) due within 15 days.';
+    }
     if (_expiringDocsCount > 0) {
       return 'Action required: $_expiringDocsCount document(s) expiring within 30 days.';
     }
@@ -158,7 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: Colors.amber.shade100,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: ListTile(
-                leading: const Icon(Icons.auto_awesome, color: Color.fromARGB(255, 236, 178, 5), size: 32),
+                leading: Icon(Icons.auto_awesome, color: Colors.amber.shade900),
                 title: const Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(_generateAiInsight()),
               ),
@@ -171,7 +202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 3-Metric Overview
+            // 3-Metric Overview Cards
             Row(
               children: [
                 Expanded(
@@ -242,6 +273,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+
+            // Vehicle Hub Direct Access Tile
+            Card(
+              elevation: 1,
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _urgentVehicleAlertsCount > 0
+                      ? Colors.red.shade100
+                      : Colors.teal.shade100,
+                  child: Icon(
+                    Icons.directions_car_filled_outlined,
+                    color: _urgentVehicleAlertsCount > 0 ? Colors.red : Colors.teal,
+                  ),
+                ),
+                title: const Text('Vehicle Hub', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(_urgentVehicleAlertsCount > 0
+                    ? '$_urgentVehicleAlertsCount urgent renewal alert(s)'
+                    : '${_vehicles.length} vehicle(s) tracked'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const VehiclesScreen()),
+                  ).then((_) => _loadDashboardData());
+                },
+              ),
             ),
           ],
         ),
