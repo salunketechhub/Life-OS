@@ -1,3 +1,4 @@
+// lib/screens/vehicles_screen.dart
 import 'package:flutter/material.dart';
 import '../models/vehicle_item.dart';
 import '../services/vehicle_storage_service.dart';
@@ -22,10 +23,12 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   Future<void> _loadVehicles() async {
     final loaded = await _storageService.loadVehicles();
-    setState(() {
-      _vehicles = loaded;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _vehicles = loaded;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _addVehicle(
@@ -52,6 +55,16 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     await _storageService.saveVehicles(_vehicles);
   }
 
+  Future<void> _updateVehicle(VehicleItem updatedVehicle) async {
+    final index = _vehicles.indexWhere((v) => v.id == updatedVehicle.id);
+    if (index != -1) {
+      setState(() {
+        _vehicles[index] = updatedVehicle;
+      });
+      await _storageService.saveVehicles(_vehicles);
+    }
+  }
+
   Future<void> _deleteVehicle(String id) async {
     setState(() {
       _vehicles.removeWhere((v) => v.id == id);
@@ -65,13 +78,17 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
     return diff >= 0 && diff <= 15;
   }
 
-  void _showAddVehicleSheet() {
-    final nameController = TextEditingController();
-    final regController = TextEditingController();
-    VehicleType selectedType = VehicleType.twoWheeler;
-    DateTime? insDate;
-    DateTime? pucDate;
-    DateTime? serviceDate;
+  void _showVehicleFormSheet({VehicleItem? vehicleToEdit}) {
+    final isEditing = vehicleToEdit != null;
+    final nameController =
+        TextEditingController(text: vehicleToEdit?.name ?? '');
+    final regController =
+        TextEditingController(text: vehicleToEdit?.registrationNumber ?? '');
+    VehicleType selectedType =
+        vehicleToEdit?.type ?? VehicleType.twoWheeler;
+    DateTime? insDate = vehicleToEdit?.insuranceExpiry;
+    DateTime? pucDate = vehicleToEdit?.pucExpiry;
+    DateTime? serviceDate = vehicleToEdit?.nextServiceDate;
 
     showModalBottomSheet(
       context: context,
@@ -94,9 +111,12 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Add Vehicle Record',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    Text(
+                      isEditing ? 'Edit Vehicle Record' : 'Add Vehicle Record',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -149,7 +169,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: DateTime.now().add(const Duration(days: 180)),
+                          initialDate: insDate ??
+                              DateTime.now().add(const Duration(days: 180)),
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2035),
                         );
@@ -168,7 +189,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: DateTime.now().add(const Duration(days: 90)),
+                          initialDate: pucDate ??
+                              DateTime.now().add(const Duration(days: 90)),
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2035),
                         );
@@ -182,19 +204,34 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () {
-                          if (nameController.text.trim().isNotEmpty) {
-                            _addVehicle(
-                              nameController.text,
-                              regController.text,
-                              selectedType,
-                              insDate,
-                              pucDate,
-                              serviceDate,
-                            );
+                          final name = nameController.text.trim();
+                          if (name.isNotEmpty) {
+                            if (isEditing) {
+                              _updateVehicle(VehicleItem(
+                                id: vehicleToEdit.id,
+                                name: name,
+                                registrationNumber: regController.text.trim(),
+                                type: selectedType,
+                                insuranceExpiry: insDate,
+                                pucExpiry: pucDate,
+                                nextServiceDate: serviceDate,
+                              ));
+                            } else {
+                              _addVehicle(
+                                name,
+                                regController.text,
+                                selectedType,
+                                insDate,
+                                pucDate,
+                                serviceDate,
+                              );
+                            }
                             Navigator.pop(ctx);
                           }
                         },
-                        child: const Text('Save Vehicle'),
+                        child: Text(
+                          isEditing ? 'Update Vehicle' : 'Save Vehicle',
+                        ),
                       ),
                     ),
                   ],
@@ -210,13 +247,15 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Vehicle Hub - Life OS')),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddVehicleSheet,
+        onPressed: () => _showVehicleFormSheet(),
         child: const Icon(Icons.add),
       ),
       body: _vehicles.isEmpty
@@ -268,7 +307,12 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline),
+                              icon: const Icon(Icons.edit_outlined, size: 20),
+                              onPressed: () =>
+                                  _showVehicleFormSheet(vehicleToEdit: v),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20),
                               onPressed: () => _deleteVehicle(v.id),
                             ),
                           ],
@@ -285,7 +329,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                                   'Ins: ${v.insuranceExpiry!.day}/${v.insuranceExpiry!.month}/${v.insuranceExpiry!.year}',
                                   style: TextStyle(
                                     color: insUrgent ? Colors.red : null,
-                                    fontWeight: insUrgent ? FontWeight.bold : null,
+                                    fontWeight:
+                                        insUrgent ? FontWeight.bold : null,
                                     fontSize: 11,
                                   ),
                                 ),
@@ -297,7 +342,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                                   'PUC: ${v.pucExpiry!.day}/${v.pucExpiry!.month}/${v.pucExpiry!.year}',
                                   style: TextStyle(
                                     color: pucUrgent ? Colors.red : null,
-                                    fontWeight: pucUrgent ? FontWeight.bold : null,
+                                    fontWeight:
+                                        pucUrgent ? FontWeight.bold : null,
                                     fontSize: 11,
                                   ),
                                 ),

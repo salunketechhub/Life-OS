@@ -1,3 +1,4 @@
+// lib/screens/documents_screen.dart
 import 'package:flutter/material.dart';
 import '../models/document_item.dart';
 import '../services/document_storage_service.dart';
@@ -23,10 +24,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
   Future<void> _loadDocuments() async {
     final loaded = await _storageService.loadDocuments();
-    setState(() {
-      _documents = loaded;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _documents = loaded;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _addDocument(
@@ -49,6 +52,16 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     await _storageService.saveDocuments(_documents);
   }
 
+  Future<void> _updateDocument(DocumentItem updatedDoc) async {
+    final index = _documents.indexWhere((d) => d.id == updatedDoc.id);
+    if (index != -1) {
+      setState(() {
+        _documents[index] = updatedDoc;
+      });
+      await _storageService.saveDocuments(_documents);
+    }
+  }
+
   Future<void> _deleteDocument(String id) async {
     setState(() {
       _documents.removeWhere((doc) => doc.id == id);
@@ -62,11 +75,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     return daysUntil >= 0 && daysUntil <= 30;
   }
 
-  void _showAddDocumentSheet() {
-    final titleController = TextEditingController();
-    final numberController = TextEditingController();
-    DocumentCategory chosenCategory = DocumentCategory.personal;
-    DateTime? chosenExpiry;
+  void _showDocumentFormSheet({DocumentItem? docToEdit}) {
+    final isEditing = docToEdit != null;
+    final titleController = TextEditingController(text: docToEdit?.title ?? '');
+    final numberController =
+        TextEditingController(text: docToEdit?.documentNumber ?? '');
+    DocumentCategory chosenCategory =
+        docToEdit?.category ?? DocumentCategory.personal;
+    DateTime? chosenExpiry = docToEdit?.expiryDate;
 
     showModalBottomSheet(
       context: context,
@@ -84,90 +100,107 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                 top: 20,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Add New Document Record',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: titleController,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Document Name (e.g., Passport, PAN)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: numberController,
-                    decoration: const InputDecoration(
-                      hintText: 'Document / Registration Number',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<DocumentCategory>(
-                    initialValue: chosenCategory,
-                    decoration: const InputDecoration(
-                      labelText: 'Category',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: DocumentCategory.values.map((c) {
-                      return DropdownMenuItem(
-                        value: c,
-                        child: Text(c.name.toUpperCase()),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setModalState(() => chosenCategory = val);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.calendar_today, size: 18),
-                        label: Text(
-                          chosenExpiry == null
-                              ? 'Set Expiry Date'
-                              : '${chosenExpiry!.day}/${chosenExpiry!.month}/${chosenExpiry!.year}',
-                        ),
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now().add(const Duration(days: 365)),
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2045),
-                          );
-                          if (picked != null) {
-                            setModalState(() => chosenExpiry = picked);
-                          }
-                        },
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isEditing ? 'Edit Document Record' : 'Add New Document Record',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const Spacer(),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (titleController.text.trim().isNotEmpty) {
-                            _addDocument(
-                              titleController.text,
-                              numberController.text,
-                              chosenCategory,
-                              chosenExpiry,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Document Name (e.g., Passport, PAN)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: numberController,
+                      decoration: const InputDecoration(
+                        hintText: 'Document / Registration Number',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<DocumentCategory>(
+                      initialValue: chosenCategory,
+                      decoration: const InputDecoration(
+                        labelText: 'Category',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: DocumentCategory.values.map((c) {
+                        return DropdownMenuItem(
+                          value: c,
+                          child: Text(c.name.toUpperCase()),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setModalState(() => chosenCategory = val);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(
+                            chosenExpiry == null
+                                ? 'Set Expiry Date'
+                                : '${chosenExpiry!.day}/${chosenExpiry!.month}/${chosenExpiry!.year}',
+                          ),
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: chosenExpiry ??
+                                  DateTime.now().add(const Duration(days: 365)),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2045),
                             );
+                            if (picked != null) {
+                              setModalState(() => chosenExpiry = picked);
+                            }
+                          },
+                        ),
+                        const Spacer(),
+                        ElevatedButton(
+                          onPressed: () {
+                            final title = titleController.text.trim();
+                            if (title.isEmpty) return;
+
+                            if (isEditing) {
+                              _updateDocument(DocumentItem(
+                                id: docToEdit.id,
+                                title: title,
+                                documentNumber: numberController.text.trim(),
+                                category: chosenCategory,
+                                expiryDate: chosenExpiry,
+                              ));
+                            } else {
+                              _addDocument(
+                                title,
+                                numberController.text,
+                                chosenCategory,
+                                chosenExpiry,
+                              );
+                            }
                             Navigator.pop(ctx);
-                          }
-                        },
-                        child: const Text('Save Record'),
-                      ),
-                    ],
-                  ),
-                ],
+                          },
+                          child: Text(isEditing ? 'Update Record' : 'Save Record'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -193,7 +226,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         title: const Text('Document Vault - Life OS'),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddDocumentSheet,
+        onPressed: () => _showDocumentFormSheet(),
         child: const Icon(Icons.note_add),
       ),
       body: Column(
@@ -230,7 +263,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           const Divider(height: 1),
           Expanded(
             child: filteredDocs.isEmpty
-                ? const Center(child: Text('No documents stored in this category.'))
+                ? const Center(
+                    child: Text('No documents stored in this category.'),
+                  )
                 : ListView.builder(
                     itemCount: filteredDocs.length,
                     itemBuilder: (context, index) {
@@ -239,7 +274,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
                       return Card(
                         margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         elevation: 1,
                         child: ListTile(
                           leading: CircleAvatar(
@@ -264,7 +301,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                                 Text(
                                   'Expires: ${doc.expiryDate!.day}/${doc.expiryDate!.month}/${doc.expiryDate!.year}',
                                   style: TextStyle(
-                                    color: isExpiring ? Colors.red : Colors.grey.shade700,
+                                    color: isExpiring
+                                        ? Colors.red
+                                        : Colors.grey.shade700,
                                     fontWeight: isExpiring
                                         ? FontWeight.bold
                                         : FontWeight.normal,
@@ -272,9 +311,19 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                                 ),
                             ],
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _deleteDocument(doc.id),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, size: 20),
+                                onPressed: () =>
+                                    _showDocumentFormSheet(docToEdit: doc),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 20),
+                                onPressed: () => _deleteDocument(doc.id),
+                              ),
+                            ],
                           ),
                         ),
                       );

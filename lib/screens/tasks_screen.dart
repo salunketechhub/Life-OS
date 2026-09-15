@@ -22,10 +22,12 @@ class _TasksScreenState extends State<TasksScreen> {
 
   Future<void> _loadInitialData() async {
     final loaded = await _storageService.loadTasks();
-    setState(() {
-      _tasks = loaded;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _tasks = loaded;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _addTask(
@@ -34,8 +36,6 @@ class _TasksScreenState extends State<TasksScreen> {
     TaskCategory category,
     DateTime? dueDate,
   ) async {
-    if (title.trim().isEmpty) return;
-
     final newTask = Task(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: title.trim(),
@@ -48,6 +48,16 @@ class _TasksScreenState extends State<TasksScreen> {
       _tasks.insert(0, newTask);
     });
     await _storageService.saveTasks(_tasks);
+  }
+
+  Future<void> _updateTask(Task updatedTask) async {
+    final index = _tasks.indexWhere((t) => t.id == updatedTask.id);
+    if (index != -1) {
+      setState(() {
+        _tasks[index] = updatedTask;
+      });
+      await _storageService.saveTasks(_tasks);
+    }
   }
 
   Future<void> _toggleTaskCompletion(int index) async {
@@ -77,11 +87,12 @@ class _TasksScreenState extends State<TasksScreen> {
     }
   }
 
-  void _showAddTaskSheet() {
-    final titleController = TextEditingController();
-    TaskPriority selectedPriority = TaskPriority.medium;
-    TaskCategory selectedCategory = TaskCategory.personal;
-    DateTime? selectedDate;
+  void _showTaskFormSheet({Task? taskToEdit}) {
+    final isEditing = taskToEdit != null;
+    final titleController = TextEditingController(text: taskToEdit?.title ?? '');
+    TaskPriority selectedPriority = taskToEdit?.priority ?? TaskPriority.medium;
+    TaskCategory selectedCategory = taskToEdit?.category ?? TaskCategory.personal;
+    DateTime? selectedDate = taskToEdit?.dueDate;
 
     showModalBottomSheet(
       context: context,
@@ -99,109 +110,121 @@ class _TasksScreenState extends State<TasksScreen> {
                 top: 20,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'New Task',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: titleController,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'What needs to be done?',
-                      border: OutlineInputBorder(),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isEditing ? 'Edit Task' : 'New Task',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<TaskPriority>(
-                          initialValue: selectedPriority,
-                          decoration: const InputDecoration(
-                            labelText: 'Priority',
-                            border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'What needs to be done?',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<TaskPriority>(
+                            initialValue: selectedPriority,
+                            decoration: const InputDecoration(
+                              labelText: 'Priority',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: TaskPriority.values.map((p) {
+                              return DropdownMenuItem(
+                                value: p,
+                                child: Text(p.name.toUpperCase()),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setModalState(() => selectedPriority = val);
+                              }
+                            },
                           ),
-                          items: TaskPriority.values.map((p) {
-                            return DropdownMenuItem(
-                              value: p,
-                              child: Text(p.name.toUpperCase()),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<TaskCategory>(
+                            initialValue: selectedCategory,
+                            decoration: const InputDecoration(
+                              labelText: 'Category',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: TaskCategory.values.map((c) {
+                              return DropdownMenuItem(
+                                value: c,
+                                child: Text(c.name.toUpperCase()),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setModalState(() => selectedCategory = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(
+                            selectedDate == null
+                                ? 'Set Due Date'
+                                : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
+                          ),
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate ?? DateTime.now(),
+                              firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                              lastDate: DateTime(2035),
                             );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setModalState(() => selectedPriority = val);
+                            if (picked != null) {
+                              setModalState(() => selectedDate = picked);
                             }
                           },
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<TaskCategory>(
-                          initialValue: selectedCategory,
-                          decoration: const InputDecoration(
-                            labelText: 'Category',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: TaskCategory.values.map((c) {
-                            return DropdownMenuItem(
-                              value: c,
-                              child: Text(c.name.toUpperCase()),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setModalState(() => selectedCategory = val);
+                        const Spacer(),
+                        ElevatedButton(
+                          onPressed: () {
+                            final trimmed = titleController.text.trim();
+                            if (trimmed.isEmpty) return;
+
+                            if (isEditing) {
+                              _updateTask(taskToEdit.copyWith(
+                                title: trimmed,
+                                priority: selectedPriority,
+                                category: selectedCategory,
+                                dueDate: selectedDate,
+                              ));
+                            } else {
+                              _addTask(
+                                trimmed,
+                                selectedPriority,
+                                selectedCategory,
+                                selectedDate,
+                              );
                             }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.calendar_today, size: 18),
-                        label: Text(
-                          selectedDate == null
-                              ? 'Set Due Date'
-                              : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
-                        ),
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime(2035),
-                          );
-                          if (picked != null) {
-                            setModalState(() => selectedDate = picked);
-                          }
-                        },
-                      ),
-                      const Spacer(),
-                      ElevatedButton(
-                        onPressed: () {
-                          if (titleController.text.trim().isNotEmpty) {
-                            _addTask(
-                              titleController.text,
-                              selectedPriority,
-                              selectedCategory,
-                              selectedDate,
-                            );
                             Navigator.pop(ctx);
-                          }
-                        },
-                        child: const Text('Save Task'),
-                      ),
-                    ],
-                  ),
-                ],
+                          },
+                          child: Text(isEditing ? 'Update Task' : 'Save Task'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -223,7 +246,7 @@ class _TasksScreenState extends State<TasksScreen> {
         title: const Text('Tasks - Life OS'),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTaskSheet,
+        onPressed: () => _showTaskFormSheet(),
         child: const Icon(Icons.add),
       ),
       body: _tasks.isEmpty
@@ -277,9 +300,18 @@ class _TasksScreenState extends State<TasksScreen> {
                           ),
                       ],
                     ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _deleteTask(task.id),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          onPressed: () => _showTaskFormSheet(taskToEdit: task),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          onPressed: () => _deleteTask(task.id),
+                        ),
+                      ],
                     ),
                   ),
                 );

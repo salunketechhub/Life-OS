@@ -1,3 +1,4 @@
+// lib/screens/bills_screen.dart
 import 'package:flutter/material.dart';
 import '../models/bill_item.dart';
 import '../services/bill_storage_service.dart';
@@ -22,10 +23,12 @@ class _BillsScreenState extends State<BillsScreen> {
 
   Future<void> _loadBills() async {
     final loaded = await _storageService.loadBills();
-    setState(() {
-      _bills = loaded;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _bills = loaded;
+        _isLoading = false;
+      });
+    }
   }
 
   double get _totalMonthlySpend {
@@ -62,6 +65,16 @@ class _BillsScreenState extends State<BillsScreen> {
     await _storageService.saveBills(_bills);
   }
 
+  Future<void> _updateBill(BillItem updatedBill) async {
+    final index = _bills.indexWhere((b) => b.id == updatedBill.id);
+    if (index != -1) {
+      setState(() {
+        _bills[index] = updatedBill;
+      });
+      await _storageService.saveBills(_bills);
+    }
+  }
+
   Future<void> _deleteBill(String id) async {
     setState(() {
       _bills.removeWhere((b) => b.id == id);
@@ -69,13 +82,21 @@ class _BillsScreenState extends State<BillsScreen> {
     await _storageService.saveBills(_bills);
   }
 
-  void _showAddBillSheet() {
-    final titleController = TextEditingController();
-    final amountController = TextEditingController();
-    final dayController = TextEditingController(text: '5');
-    BillCategory selectedCategory = BillCategory.subscription;
-    BillingCycle selectedCycle = BillingCycle.monthly;
-    bool autoPay = false;
+  void _showBillFormSheet({BillItem? billToEdit}) {
+    final isEditing = billToEdit != null;
+    final titleController =
+        TextEditingController(text: billToEdit?.title ?? '');
+    final amountController = TextEditingController(
+      text: billToEdit != null ? billToEdit.amount.toStringAsFixed(0) : '',
+    );
+    final dayController = TextEditingController(
+      text: billToEdit != null ? billToEdit.dueDayOfMonth.toString() : '5',
+    );
+    BillCategory selectedCategory =
+        billToEdit?.category ?? BillCategory.subscription;
+    BillingCycle selectedCycle =
+        billToEdit?.cycle ?? BillingCycle.monthly;
+    bool autoPay = billToEdit?.isAutoPay ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -93,125 +114,153 @@ class _BillsScreenState extends State<BillsScreen> {
                 top: 20,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Track Bill or Subscription',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: titleController,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Name (e.g., Netflix, Internet, Rent)',
-                      border: OutlineInputBorder(),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isEditing
+                          ? 'Edit Bill / Subscription'
+                          : 'Track Bill or Subscription',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: amountController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(
-                            hintText: 'Amount (e.g., 649)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Name (e.g., Netflix, Internet, Rent)',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: dayController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Due Day (1-31)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<BillCategory>(
-                          initialValue: selectedCategory,
-                          decoration: const InputDecoration(
-                            labelText: 'Category',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: BillCategory.values.map((c) {
-                            return DropdownMenuItem(
-                              value: c,
-                              child: Text(c.name.toUpperCase()),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setModalState(() => selectedCategory = val);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<BillingCycle>(
-                          initialValue: selectedCycle,
-                          decoration: const InputDecoration(
-                            labelText: 'Cycle',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: BillingCycle.values.map((c) {
-                            return DropdownMenuItem(
-                              value: c,
-                              child: Text(c.name.toUpperCase()),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setModalState(() => selectedCycle = val);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Auto-pay Enabled'),
-                    value: autoPay,
-                    onChanged: (val) => setModalState(() => autoPay = val),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        final amt = double.tryParse(amountController.text.trim()) ?? 0.0;
-                        final day = int.tryParse(dayController.text.trim()) ?? 1;
-                        if (titleController.text.trim().isNotEmpty && amt > 0) {
-                          _addBill(
-                            titleController.text,
-                            amt,
-                            selectedCategory,
-                            selectedCycle,
-                            day.clamp(1, 31),
-                            autoPay,
-                          );
-                          Navigator.pop(ctx);
-                        }
-                      },
-                      child: const Text('Save Commitment'),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: amountController,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                    decimal: true),
+                            decoration: const InputDecoration(
+                              hintText: 'Amount (e.g., 649)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: dayController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Due Day (1-31)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<BillCategory>(
+                            initialValue: selectedCategory,
+                            decoration: const InputDecoration(
+                              labelText: 'Category',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: BillCategory.values.map((c) {
+                              return DropdownMenuItem(
+                                value: c,
+                                child: Text(c.name.toUpperCase()),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setModalState(() => selectedCategory = val);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<BillingCycle>(
+                            initialValue: selectedCycle,
+                            decoration: const InputDecoration(
+                              labelText: 'Cycle',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: BillingCycle.values.map((c) {
+                              return DropdownMenuItem(
+                                value: c,
+                                child: Text(c.name.toUpperCase()),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setModalState(() => selectedCycle = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Auto-pay Enabled'),
+                      value: autoPay,
+                      onChanged: (val) => setModalState(() => autoPay = val),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          final amt =
+                              double.tryParse(amountController.text.trim()) ??
+                                  0.0;
+                          final day =
+                              int.tryParse(dayController.text.trim()) ?? 1;
+                          final title = titleController.text.trim();
+
+                          if (title.isNotEmpty && amt > 0) {
+                            if (isEditing) {
+                              _updateBill(BillItem(
+                                id: billToEdit.id,
+                                title: title,
+                                amount: amt,
+                                category: selectedCategory,
+                                cycle: selectedCycle,
+                                dueDayOfMonth: day.clamp(1, 31),
+                                isAutoPay: autoPay,
+                              ));
+                            } else {
+                              _addBill(
+                                title,
+                                amt,
+                                selectedCategory,
+                                selectedCycle,
+                                day.clamp(1, 31),
+                                autoPay,
+                              );
+                            }
+                            Navigator.pop(ctx);
+                          }
+                        },
+                        child: Text(
+                          isEditing ? 'Update Commitment' : 'Save Commitment',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -233,7 +282,7 @@ class _BillsScreenState extends State<BillsScreen> {
         title: const Text('Bills & Subs - Life OS'),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddBillSheet,
+        onPressed: () => _showBillFormSheet(),
         child: const Icon(Icons.add),
       ),
       body: Column(
@@ -242,19 +291,23 @@ class _BillsScreenState extends State<BillsScreen> {
           Card(
             margin: const EdgeInsets.all(16),
             color: Colors.indigo.shade50,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  const Icon(Icons.receipt_long, size: 36, color: Colors.indigo),
+                  const Icon(Icons.receipt_long,
+                      size: 36, color: Colors.indigo),
                   const SizedBox(width: 16),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
                         'Monthly Commitment',
-                        style: TextStyle(fontSize: 14, color: Colors.black54),
+                        style:
+                            TextStyle(fontSize: 14, color: Colors.black54),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -273,21 +326,25 @@ class _BillsScreenState extends State<BillsScreen> {
           ),
           Expanded(
             child: _bills.isEmpty
-                ? const Center(child: Text('No recurring bills or subscriptions added.'))
+                ? const Center(
+                    child: Text('No recurring bills or subscriptions added.'))
                 : ListView.builder(
                     itemCount: _bills.length,
                     itemBuilder: (context, index) {
                       final bill = _bills[index];
                       return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 6),
                         child: ListTile(
                           leading: CircleAvatar(
                             backgroundColor: Colors.indigo.shade100,
-                            child: const Icon(Icons.payment, color: Colors.indigo),
+                            child: const Icon(Icons.payment,
+                                color: Colors.indigo),
                           ),
                           title: Text(
                             bill.title,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
                             'Due on day ${bill.dueDayOfMonth} • ${bill.cycle.name.toUpperCase()}${bill.isAutoPay ? ' • Auto-Pay' : ''}',
@@ -303,8 +360,15 @@ class _BillsScreenState extends State<BillsScreen> {
                                   fontSize: 15,
                                 ),
                               ),
+                              const SizedBox(width: 4),
                               IconButton(
-                                icon: const Icon(Icons.delete_outline),
+                                icon: const Icon(Icons.edit_outlined, size: 20),
+                                onPressed: () =>
+                                    _showBillFormSheet(billToEdit: bill),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline,
+                                    size: 20),
                                 onPressed: () => _deleteBill(bill.id),
                               ),
                             ],
