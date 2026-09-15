@@ -4,7 +4,8 @@ import '../services/task_storage_service.dart';
 import '../services/document_storage_service.dart';
 import '../services/bill_storage_service.dart';
 import '../services/vehicle_storage_service.dart';
-
+import 'package:flutter/services.dart';
+import '../services/backup_service.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -42,6 +43,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _handleBackupExport() async {
+  final backupService = BackupService();
+  final jsonPayload = await backupService.generateBackupJson();
+
+  if (!mounted) return;
+
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('Life OS Backup Export'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'All tasks, documents, bills, and vehicles packaged as JSON:',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  jsonPayload,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            icon: const Icon(Icons.copy, size: 16),
+            label: const Text('Copy JSON'),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: jsonPayload));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Backup JSON copied to clipboard')),
+              );
+            },
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      );
+    },
+  );
+}
   void _showEmergencySheet() {
     showModalBottomSheet(
       context: context,
@@ -166,7 +223,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
+                
+                //storage doagnosis
+                const SizedBox(height: 20),
+                const Text(
+                  'Data Ownership',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
 
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.download_for_offline, color: Colors.deepPurple),
+                    title: const Text('Export Complete Life OS Backup'),
+                    subtitle: const Text('Export all modules as JSON for personal custody'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _handleBackupExport,
+                  ),
+                ),
                 Card(
                   child: SwitchListTile(
                     secondary: Icon(
