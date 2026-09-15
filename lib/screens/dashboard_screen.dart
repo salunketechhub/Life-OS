@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/task.dart';
 import '../models/document_item.dart';
+import '../models/bill_item.dart';
 import '../services/task_storage_service.dart';
 import '../services/document_storage_service.dart';
+import '../services/bill_storage_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -14,9 +16,11 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final TaskStorageService _taskService = TaskStorageService();
   final DocumentStorageService _docService = DocumentStorageService();
+  final BillStorageService _billService = BillStorageService();
 
   List<Task> _tasks = [];
   List<DocumentItem> _documents = [];
+  List<BillItem> _bills = [];
   bool _isLoading = true;
 
   @override
@@ -28,10 +32,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadDashboardData() async {
     final tasks = await _taskService.loadTasks();
     final docs = await _docService.loadDocuments();
+    final bills = await _billService.loadBills();
     if (mounted) {
       setState(() {
         _tasks = tasks;
         _documents = docs;
+        _bills = bills;
         _isLoading = false;
       });
     }
@@ -48,8 +54,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }).length;
   }
 
+  double get _monthlyCommitment {
+    return _bills.fold(0.0, (sum, bill) {
+      if (bill.cycle == BillingCycle.monthly) {
+        return sum + bill.amount;
+      } else {
+        return sum + (bill.amount / 12);
+      }
+    });
+  }
+
   int get _calculatedLifeScore {
-    if (_tasks.isEmpty && _documents.isEmpty) return 70;
+    if (_tasks.isEmpty && _documents.isEmpty && _bills.isEmpty) return 75;
     int score = 80;
     if (_pendingTasksCount > 5) score -= 10;
     if (_expiringDocsCount > 0) score -= 15;
@@ -62,15 +78,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _generateAiInsight() {
     if (_expiringDocsCount > 0) {
-      return 'Action required: You have $_expiringDocsCount document(s) expiring within 30 days.';
+      return 'Action required: $_expiringDocsCount document(s) expiring within 30 days.';
+    }
+    if (_monthlyCommitment > 15000) {
+      return 'Monthly recurring commitments are ₹${_monthlyCommitment.toStringAsFixed(0)}. Review unused subscriptions.';
     }
     if (_pendingTasksCount > 3) {
-      return 'You have $_pendingTasksCount pending tasks. Focus on high-priority items today.';
+      return 'You have $_pendingTasksCount pending tasks. Focus on high-priority items.';
     }
-    if (_tasks.isNotEmpty && _pendingTasksCount == 0) {
-      return 'All caught up! Great job maintaining your tasks today.';
-    }
-    return 'Your Life OS is healthy. Add new goals and track your assets regularly.';
+    return 'Your Life OS records are organized and on track.';
   }
 
   @override
@@ -99,7 +115,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Greeting & Score Card
+            // Life Score Card
             Card(
               color: Theme.of(context).colorScheme.primaryContainer,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -142,7 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: Colors.amber.shade100,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: ListTile(
-                leading: const Icon(Icons.auto_awesome, color: Colors.amber),
+                leading: const Icon(Icons.auto_awesome, color: Color.fromARGB(255, 236, 178, 5), size: 32),
                 title: const Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(_generateAiInsight()),
               ),
@@ -155,7 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Metric Cards Grid
+            // 3-Metric Overview
             Row(
               children: [
                 Expanded(
@@ -165,19 +181,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          const Icon(Icons.check_circle_outline, color: Colors.blue, size: 32),
+                          const Icon(Icons.check_circle_outline, color: Colors.blue, size: 28),
                           const SizedBox(height: 8),
                           Text(
                             '$_pendingTasksCount',
-                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                           ),
-                          const Text('Tasks Pending', style: TextStyle(color: Colors.grey)),
+                          const Text('Tasks Due', style: TextStyle(color: Colors.grey, fontSize: 12)),
                         ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Card(
                     elevation: 2,
@@ -188,37 +204,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Icon(
                             Icons.warning_amber_rounded,
                             color: _expiringDocsCount > 0 ? Colors.red : Colors.green,
-                            size: 32,
+                            size: 28,
                           ),
                           const SizedBox(height: 8),
                           Text(
                             '$_expiringDocsCount',
                             style: TextStyle(
-                              fontSize: 24,
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: _expiringDocsCount > 0 ? Colors.red : Colors.black,
                             ),
                           ),
-                          const Text('Expiring Docs', style: TextStyle(color: Colors.grey)),
+                          const Text('Expiring Docs', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.credit_card, color: Colors.indigo, size: 28),
+                          const SizedBox(height: 8),
+                          Text(
+                            '₹${_monthlyCommitment.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const Text('Monthly Outflow', style: TextStyle(color: Colors.grey, fontSize: 12)),
                         ],
                       ),
                     ),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-
-            Card(
-              elevation: 1,
-              child: ListTile(
-                leading: const Icon(Icons.folder_shared_outlined, color: Colors.purple),
-                title: const Text('Total Documents Vaulted'),
-                trailing: Text(
-                  '${_documents.length}',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
             ),
           ],
         ),
