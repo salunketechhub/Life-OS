@@ -1,4 +1,3 @@
-// lib/screens/tasks_screen.dart
 import 'package:flutter/material.dart';
 import '../models/task.dart';
 import '../services/task_storage_service.dart';
@@ -12,7 +11,6 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final TaskStorageService _storageService = TaskStorageService();
-  final TextEditingController _taskController = TextEditingController();
   List<Task> _tasks = [];
   bool _isLoading = true;
 
@@ -30,18 +28,25 @@ class _TasksScreenState extends State<TasksScreen> {
     });
   }
 
-  Future<void> _addTask(String title) async {
+  Future<void> _addTask(
+    String title,
+    TaskPriority priority,
+    TaskCategory category,
+    DateTime? dueDate,
+  ) async {
     if (title.trim().isEmpty) return;
 
     final newTask = Task(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: title.trim(),
+      priority: priority,
+      category: category,
+      dueDate: dueDate,
     );
 
     setState(() {
-      _tasks.insert(0, newTask); // Add newest to the top
+      _tasks.insert(0, newTask);
     });
-    _taskController.clear();
     await _storageService.saveTasks(_tasks);
   }
 
@@ -61,6 +66,150 @@ class _TasksScreenState extends State<TasksScreen> {
     await _storageService.saveTasks(_tasks);
   }
 
+  Color _getPriorityColor(TaskPriority priority) {
+    switch (priority) {
+      case TaskPriority.high:
+        return Colors.redAccent;
+      case TaskPriority.medium:
+        return Colors.orangeAccent;
+      case TaskPriority.low:
+        return Colors.green;
+    }
+  }
+
+  void _showAddTaskSheet() {
+    final titleController = TextEditingController();
+    TaskPriority selectedPriority = TaskPriority.medium;
+    TaskCategory selectedCategory = TaskCategory.personal;
+    DateTime? selectedDate;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'New Task',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'What needs to be done?',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<TaskPriority>(
+                          initialValue: selectedPriority,
+                          decoration: const InputDecoration(
+                            labelText: 'Priority',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: TaskPriority.values.map((p) {
+                            return DropdownMenuItem(
+                              value: p,
+                              child: Text(p.name.toUpperCase()),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setModalState(() => selectedPriority = val);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<TaskCategory>(
+                          initialValue: selectedCategory,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: TaskCategory.values.map((c) {
+                            return DropdownMenuItem(
+                              value: c,
+                              child: Text(c.name.toUpperCase()),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setModalState(() => selectedCategory = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: Text(
+                          selectedDate == null
+                              ? 'Set Due Date'
+                              : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
+                        ),
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedDate = picked);
+                          }
+                        },
+                      ),
+                      const Spacer(),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (titleController.text.trim().isNotEmpty) {
+                            _addTask(
+                              titleController.text,
+                              selectedPriority,
+                              selectedCategory,
+                              selectedDate,
+                            );
+                            Navigator.pop(ctx);
+                          }
+                        },
+                        child: const Text('Save Task'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -73,61 +222,69 @@ class _TasksScreenState extends State<TasksScreen> {
       appBar: AppBar(
         title: const Text('Tasks - Life OS'),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _taskController,
-                    decoration: const InputDecoration(
-                      hintText: 'Add a new task...',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: _addTask,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.add_circle, size: 36),
-                  onPressed: () => _addTask(_taskController.text),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _tasks.isEmpty
-                ? const Center(child: Text('No tasks recorded yet.'))
-                : ListView.builder(
-                    itemCount: _tasks.length,
-                    itemBuilder: (context, index) {
-                      final task = _tasks[index];
-                      return ListTile(
-                        leading: Checkbox(
-                          value: task.isCompleted,
-                          onChanged: (_) => _toggleTaskCompletion(index),
-                        ),
-                        title: Text(
-                          task.title,
-                          style: TextStyle(
-                            decoration: task.isCompleted
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
-                            color: task.isCompleted ? Colors.grey : null,
-                          ),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => _deleteTask(task.id),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddTaskSheet,
+        child: const Icon(Icons.add),
       ),
+      body: _tasks.isEmpty
+          ? const Center(child: Text('No tasks recorded yet.'))
+          : ListView.builder(
+              itemCount: _tasks.length,
+              itemBuilder: (context, index) {
+                final task = _tasks[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  elevation: 1,
+                  child: ListTile(
+                    leading: Checkbox(
+                      value: task.isCompleted,
+                      onChanged: (_) => _toggleTaskCompletion(index),
+                    ),
+                    title: Text(
+                      task.title,
+                      style: TextStyle(
+                        decoration: task.isCompleted
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                        color: task.isCompleted ? Colors.grey : null,
+                      ),
+                    ),
+                    subtitle: Wrap(
+                      spacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Chip(
+                          label: Text(
+                            task.priority.name.toUpperCase(),
+                            style: const TextStyle(fontSize: 10, color: Colors.white),
+                          ),
+                          backgroundColor: _getPriorityColor(task.priority),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        Chip(
+                          label: Text(
+                            task.category.name.toUpperCase(),
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                        ),
+                        if (task.dueDate != null)
+                          Text(
+                            'Due: ${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}',
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                      ],
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _deleteTask(task.id),
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
